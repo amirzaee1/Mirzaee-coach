@@ -1,0 +1,6 @@
+{
+  "name": "Persian AI Network Marketing Coach",
+  "description": "An AI-powered coach to help Farsi-speaking network marketers with motivation, skills, and decision-making, using Gemini API.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
