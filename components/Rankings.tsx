@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { Person, OrgEvent, SortBy } from '../types';
 import { AppNav } from '../App';
-import { getRankedPeople } from '../utils/scoring';
+import { getRankedPeople, getTopTenSales } from '../utils/scoring';
 import { RANK_BADGES } from '../constants';
 import { formatNumber } from '../utils/date';
-import { exportRankingsImage } from '../utils/imageExport';
-import { buildRankingsText } from '../utils/textExport';
+import { exportRankingsImage, exportTopTenSalesImage } from '../utils/imageExport';
+import { buildRankingsText, buildTopTenSalesText } from '../utils/textExport';
 
 interface Props {
   people: Person[];
   events: OrgEvent[];
   nav: AppNav;
 }
+
+type ViewMode = 'scores' | 'sales';
 
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'total', label: 'کل' },
@@ -21,6 +23,7 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
 ];
 
 const Rankings: React.FC<Props> = ({ people, events, nav }) => {
+  const [viewMode, setViewMode] = useState<ViewMode>('scores');
   const [sortBy, setSortBy] = useState<SortBy>('total');
   const [teamFilter, setTeamFilter] = useState('');
   const [searchQ, setSearchQ] = useState('');
@@ -36,6 +39,8 @@ const Rankings: React.FC<Props> = ({ people, events, nav }) => {
     () => getRankedPeople(people, events, sortBy, !showInactive),
     [people, events, sortBy, showInactive]
   );
+
+  const salesRanked = useMemo(() => getTopTenSales(people, events), [people, events]);
 
   const filtered = useMemo(() => {
     return ranked.filter((rp) => {
@@ -61,140 +66,209 @@ const Rankings: React.FC<Props> = ({ people, events, nav }) => {
       <div className="sticky top-0 z-10 bg-slate-950 border-b border-slate-800">
         <div className="flex items-center gap-3 p-4 pb-3">
           <h1 className="text-lg font-bold text-slate-100 flex-1">🏆 رتبه‌بندی کامل</h1>
-          <span className="text-xs text-slate-500">{filtered.length} نفر</span>
+          <span className="text-xs text-slate-500">{viewMode === 'scores' ? filtered.length : salesRanked.length} نفر</span>
         </div>
 
-        {/* Sort tabs */}
+        {/* View mode toggle */}
         <div className="flex gap-2 px-4 pb-3">
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setSortBy(opt.value)}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                sortBy === opt.value
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Search + filters */}
-        <div className="flex gap-2 px-4 pb-3">
-          <input
-            type="text"
-            value={searchQ}
-            onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="جستجو..."
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500"
-          />
-          {teams.length > 0 && (
-            <select
-              value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-violet-500"
-            >
-              <option value="">همه تیم‌ها</option>
-              {teams.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          )}
-        </div>
-
-        <div className="px-4 pb-3">
           <button
-            onClick={() => setShowInactive(!showInactive)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-              showInactive
-                ? 'border-amber-500 bg-amber-900/30 text-amber-400'
-                : 'border-slate-700 text-slate-500 hover:border-slate-600'
+            onClick={() => setViewMode('scores')}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'scores' ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
-            {showInactive ? '✓ نمایش غیرفعال‌ها' : 'نمایش غیرفعال‌ها'}
+            🏆 امتیاز
+          </button>
+          <button
+            onClick={() => setViewMode('sales')}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'sales' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            💰 فروش (تومان)
           </button>
         </div>
+
+        {viewMode === 'scores' && (
+          <>
+            {/* Sort tabs */}
+            <div className="flex gap-2 px-4 pb-3">
+              {SORT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSortBy(opt.value)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                    sortBy === opt.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search + filters */}
+            <div className="flex gap-2 px-4 pb-3">
+              <input
+                type="text"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                placeholder="جستجو..."
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              />
+              {teams.length > 0 && (
+                <select
+                  value={teamFilter}
+                  onChange={(e) => setTeamFilter(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-violet-500"
+                >
+                  <option value="">همه تیم‌ها</option>
+                  {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+            </div>
+
+            <div className="px-4 pb-3">
+              <button
+                onClick={() => setShowInactive(!showInactive)}
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  showInactive ? 'border-amber-500 bg-amber-900/30 text-amber-400' : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                }`}
+              >
+                {showInactive ? '✓ نمایش غیرفعال‌ها' : 'نمایش غیرفعال‌ها'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* List */}
-      <div className="flex-1 p-3 space-y-2">
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-slate-500">
-            <div className="text-4xl mb-3">🔍</div>
-            <p>نتیجه‌ای یافت نشد</p>
-          </div>
-        )}
-        {filtered.map((rp, displayIdx) => {
-          const rank = displayIdx + 1;
-          const score = getScore(rp);
-          const badge = RANK_BADGES[rank];
-          const isTop = rank <= 3;
-          const isFire = rank <= 10 && rank > 3;
+      {/* Score ranking list */}
+      {viewMode === 'scores' && (
+        <div className="flex-1 p-3 space-y-2">
+          {filtered.length === 0 && (
+            <div className="text-center py-12 text-slate-500">
+              <div className="text-4xl mb-3">🔍</div>
+              <p>نتیجه‌ای یافت نشد</p>
+            </div>
+          )}
+          {filtered.map((rp, displayIdx) => {
+            const rank = displayIdx + 1;
+            const score = getScore(rp);
+            const badge = RANK_BADGES[rank];
+            const isTop = rank <= 3;
+            const isFire = rank <= 10 && rank > 3;
 
-          return (
-            <button
-              key={rp.person.id}
-              onClick={() => nav.go('person-profile', { personId: rp.person.id })}
-              className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all text-right ${
-                rank === 1
-                  ? 'border-yellow-600/50 bg-yellow-900/20 hover:bg-yellow-900/30'
-                  : rank <= 3
-                  ? 'border-violet-700/40 bg-violet-900/15 hover:bg-violet-900/25'
-                  : 'border-slate-800 bg-slate-800/50 hover:bg-slate-800'
-              }`}
-            >
-              {/* Rank badge */}
-              <div className="w-9 text-center flex-shrink-0">
-                {badge ? (
-                  <span className="text-2xl">{badge}</span>
-                ) : (
-                  <span className={`text-sm font-bold ${isFire ? 'text-orange-400' : 'text-slate-500'}`}>
-                    {isFire ? '🔥' : String(rank)}
-                  </span>
-                )}
-              </div>
-
-              {/* Avatar */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${
-                isTop ? 'bg-gradient-to-br from-violet-500 to-indigo-700' : 'bg-slate-700'
-              }`}>
-                {rp.person.firstName[0]}
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`font-semibold truncate ${isTop ? 'text-slate-100' : 'text-slate-200'}`}>
-                    {rp.person.firstName} {rp.person.lastName}
-                  </span>
-                  {!rp.person.isActive && (
-                    <span className="text-xs text-slate-500 bg-slate-700 px-1.5 py-0.5 rounded flex-shrink-0">غیرفعال</span>
+            return (
+              <button
+                key={rp.person.id}
+                onClick={() => nav.go('person-profile', { personId: rp.person.id })}
+                className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all text-right ${
+                  rank === 1
+                    ? 'border-yellow-600/50 bg-yellow-900/20 hover:bg-yellow-900/30'
+                    : rank <= 3
+                    ? 'border-violet-700/40 bg-violet-900/15 hover:bg-violet-900/25'
+                    : 'border-slate-800 bg-slate-800/50 hover:bg-slate-800'
+                }`}
+              >
+                <div className="w-9 text-center flex-shrink-0">
+                  {badge ? <span className="text-2xl">{badge}</span> : (
+                    <span className={`text-sm font-bold ${isFire ? 'text-orange-400' : 'text-slate-500'}`}>
+                      {isFire ? '🔥' : String(rank)}
+                    </span>
                   )}
                 </div>
-                {rp.person.team && (
-                  <div className="text-xs text-slate-500 truncate">{rp.person.team}</div>
-                )}
-                <div className="flex gap-3 mt-0.5">
-                  <span className="text-xs text-slate-500">امروز: {formatNumber(rp.todayScore)}</span>
-                  <span className="text-xs text-slate-500">هفته: {formatNumber(rp.weekScore)}</span>
-                </div>
-              </div>
 
-              {/* Score */}
-              <div className="text-right flex-shrink-0">
-                <div className={`text-lg font-bold ${isTop ? 'text-violet-300' : 'text-slate-300'}`}>
-                  {formatNumber(score)}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${
+                  isTop ? 'bg-gradient-to-br from-violet-500 to-indigo-700' : 'bg-slate-700'
+                }`}>
+                  {rp.person.firstName[0]}
                 </div>
-                <div className="text-xs text-slate-500">امتیاز</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold truncate ${isTop ? 'text-slate-100' : 'text-slate-200'}`}>
+                      {rp.person.firstName} {rp.person.lastName}
+                    </span>
+                    {!rp.person.isActive && (
+                      <span className="text-xs text-slate-500 bg-slate-700 px-1.5 py-0.5 rounded flex-shrink-0">غیرفعال</span>
+                    )}
+                  </div>
+                  {rp.person.team && <div className="text-xs text-slate-500 truncate">{rp.person.team}</div>}
+                  <div className="flex gap-3 mt-0.5">
+                    <span className="text-xs text-slate-500">امروز: {formatNumber(rp.todayScore)}</span>
+                    <span className="text-xs text-slate-500">هفته: {formatNumber(rp.weekScore)}</span>
+                  </div>
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <div className={`text-lg font-bold ${isTop ? 'text-violet-300' : 'text-slate-300'}`}>{formatNumber(score)}</div>
+                  <div className="text-xs text-slate-500">امتیاز</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sales ranking list */}
+      {viewMode === 'sales' && (
+        <div className="flex-1 p-3 space-y-2">
+          {salesRanked.length === 0 && (
+            <div className="text-center py-12 text-slate-500">
+              <div className="text-4xl mb-3">💰</div>
+              <p>هنوز فروشی ثبت نشده</p>
+            </div>
+          )}
+          {salesRanked.map((d, i) => {
+            const rank = i + 1;
+            const badge = RANK_BADGES[rank];
+            const isTop = rank <= 3;
+            return (
+              <button
+                key={d.person.id}
+                onClick={() => nav.go('person-profile', { personId: d.person.id })}
+                className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all text-right ${
+                  rank === 1
+                    ? 'border-emerald-600/50 bg-emerald-900/20 hover:bg-emerald-900/30'
+                    : rank <= 3
+                    ? 'border-emerald-700/30 bg-emerald-900/10 hover:bg-emerald-900/20'
+                    : 'border-slate-800 bg-slate-800/50 hover:bg-slate-800'
+                }`}
+              >
+                <div className="w-9 text-center flex-shrink-0">
+                  {badge ? <span className="text-2xl">{badge}</span> : (
+                    <span className="text-sm font-bold text-slate-500">{rank}</span>
+                  )}
+                </div>
+
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${
+                  isTop ? 'bg-gradient-to-br from-emerald-500 to-teal-700' : 'bg-slate-700'
+                }`}>
+                  {d.person.firstName[0]}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <span className={`font-semibold truncate block ${isTop ? 'text-slate-100' : 'text-slate-200'}`}>
+                    {d.person.firstName} {d.person.lastName}
+                  </span>
+                  {d.person.team && <div className="text-xs text-slate-500 truncate">{d.person.team}</div>}
+                  <div className="text-xs text-slate-500 mt-0.5">{d.count} مرتبه خرید</div>
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <div className={`text-base font-bold ${isTop ? 'text-emerald-300' : 'text-slate-300'}`}>
+                    {formatNumber(d.totalSales / 1_000_000)} M
+                  </div>
+                  <div className="text-xs text-slate-500">تومان</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Share bar */}
-      {filtered.length > 0 && (
-        <div className="sticky bottom-16 p-4 bg-slate-950/95 border-t border-slate-800">
+      <div className="sticky bottom-16 p-4 bg-slate-950/95 border-t border-slate-800">
+        {viewMode === 'scores' && filtered.length > 0 && (
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={async () => {
@@ -216,8 +290,27 @@ const Rankings: React.FC<Props> = ({ people, events, nav }) => {
               🖼️ دانلود تصویر
             </button>
           </div>
-        </div>
-      )}
+        )}
+        {viewMode === 'sales' && salesRanked.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={async () => {
+                const text = buildTopTenSalesText(salesRanked);
+                try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
+              }}
+              className={`py-3 rounded-2xl border text-sm font-bold transition-all ${copied ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}`}
+            >
+              {copied ? '✓ کپی شد' : '📋 کپی متن'}
+            </button>
+            <button
+              onClick={() => exportTopTenSalesImage(salesRanked)}
+              className="py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition-colors"
+            >
+              🖼️ دانلود تصویر
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

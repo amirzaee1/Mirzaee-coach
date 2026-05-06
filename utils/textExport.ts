@@ -1,6 +1,7 @@
-import { RankedPerson } from '../types';
-import { RANK_BADGES, WEEKLY_PRIZES, MONTHLY_PRIZES } from '../constants';
+import { RankedPerson, Person } from '../types';
+import { RANK_BADGES, WEEKLY_PRIZES, MONTHLY_PRIZES, EVENT_TYPE_LABELS, EVENT_TYPE_ICONS } from '../constants';
 import { getTodayJalali, formatNumber, formatToman } from './date';
+import { ActivityStat } from './imageExport';
 
 function rankBadge(rank: number): string {
   return RANK_BADGES[rank] ?? `${rank}.`;
@@ -74,6 +75,55 @@ export function buildRankingsText(ranked: RankedPerson[], title: string): string
     const badge = RANK_BADGES[rank] ?? `${rank}.`;
     const name = `${rp.person.firstName} ${rp.person.lastName}`;
     lines.push(`${badge} ${name} — ${formatNumber(rp.totalScore)} امتیاز`);
+  });
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  return lines.join('\n');
+}
+
+export function buildActivityStatsText(
+  person: Person,
+  stats: ActivityStat[],
+  period: 'all' | 'today' | 'week' | 'month'
+): string {
+  const periodLabel =
+    period === 'all' ? 'کل' : period === 'today' ? 'امروز' : period === 'week' ? 'هفته' : 'ماه';
+  const date = getTodayJalali();
+  const active = stats.filter(s => s.count > 0);
+
+  const lines = [
+    `📊 آمار فعالیت‌ها — ${person.firstName} ${person.lastName}`,
+    `📅 ${date} | بازه: ${periodLabel}`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+  ];
+
+  active.forEach(s => {
+    const tomanStr = s.totalToman > 0 ? ` | ${formatToman(s.totalToman)}` : '';
+    lines.push(`${EVENT_TYPE_ICONS[s.type]} ${EVENT_TYPE_LABELS[s.type]}: ${s.count} بار — ${formatNumber(s.totalScore)} امتیاز${tomanStr}`);
+  });
+
+  const totalScore = active.reduce((acc, s) => acc + s.totalScore, 0);
+  const totalToman = active.reduce((acc, s) => acc + s.totalToman, 0);
+
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  lines.push(`✅ جمع امتیاز: ${formatNumber(totalScore)}`);
+  if (totalToman > 0) lines.push(`💰 جمع فروش: ${formatToman(totalToman)}`);
+
+  return lines.join('\n');
+}
+
+export function buildTopTenSalesText(
+  data: { person: Person; totalSales: number; count: number }[]
+): string {
+  const date = getTodayJalali();
+  const lines = [
+    `💰 تاپ ۱۰ فروش شخصی | ${date}`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+  ];
+  data.slice(0, 10).forEach((d, i) => {
+    const rank = i + 1;
+    const badge = RANK_BADGES[rank] ?? `${rank}.`;
+    const name = `${d.person.firstName} ${d.person.lastName}`;
+    lines.push(`${badge} ${name} — ${formatToman(d.totalSales)}`);
   });
   lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
   return lines.join('\n');

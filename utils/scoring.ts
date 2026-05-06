@@ -101,6 +101,23 @@ export function getTopTen(
   return getRankedPeople(people, events, period).slice(0, 10);
 }
 
+export function getTopTenSales(
+  people: Person[],
+  events: OrgEvent[]
+): { person: Person; totalSales: number; count: number }[] {
+  return people
+    .filter((p) => p.isActive)
+    .map((p) => {
+      const pe = events.filter(
+        (e) => e.personId === p.id && (e.type === 'personal_purchase' || e.type === 'new_member_score')
+      );
+      return { person: p, totalSales: pe.reduce((s, e) => s + e.rawValue, 0), count: pe.length };
+    })
+    .filter((x) => x.totalSales > 0)
+    .sort((a, b) => b.totalSales - a.totalSales)
+    .slice(0, 10);
+}
+
 export function getBestToday(people: Person[], events: OrgEvent[]): RankedPerson | null {
   const ranked = getRankedPeople(people, events, 'today');
   const best = ranked[0];

@@ -3,9 +3,9 @@ import { Person, OrgEvent, EventType, AppSettings } from '../types';
 import { AppNav } from '../App';
 import { getPersonStats, getRankedPeople } from '../utils/scoring';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_ICONS, EVENT_TYPE_COLORS } from '../constants';
-import { formatJalaliDateTime, formatNumber, formatToman } from '../utils/date';
-import { exportPersonCard } from '../utils/imageExport';
-import { buildPersonCardText } from '../utils/textExport';
+import { formatJalaliDateTime, formatNumber, formatToman, getTodayDate, getWeekStart, getMonthStart } from '../utils/date';
+import { exportPersonCard, exportActivityStatsImage, ActivityStat } from '../utils/imageExport';
+import { buildPersonCardText, buildActivityStatsText } from '../utils/textExport';
 import EventModal from './EventModal';
 import { generatePersonalMessage } from '../services/aiService';
 
@@ -23,13 +23,15 @@ interface Props {
 }
 
 const QUICK_ACTIONS: EventType[] = [
-  'meeting_attendance',
-  'personal_purchase',
-  'presentation',
-  'new_member_score',
-  'level_up',
-  'agha_mohammad_meeting',
+  'meeting_attendance', 'personal_purchase', 'presentation',
+  'new_member_score', 'level_up', 'agha_mohammad_meeting',
 ];
+
+type StatPeriod = 'all' | 'today' | 'week' | 'month';
+
+const PERIOD_LABELS: Record<StatPeriod, string> = {
+  all: 'کل', today: 'امروز', week: 'هفته', month: 'ماه',
+};
 
 const PersonProfile: React.FC<Props> = ({
   personId, people, events, settings, nav,
@@ -41,10 +43,12 @@ const PersonProfile: React.FC<Props> = ({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState(false);
   const [activeTab, setActiveTab] = useState<'stats' | 'history'>('stats');
+  const [statPeriod, setStatPeriod] = useState<StatPeriod>('all');
   const [aiMessage, setAiMessage] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiCopied, setAiCopied] = useState(false);
+  const [statsCopied, setStatsCopied] = useState(false);
 
   const person = useMemo(() => people.find((p) => p.id === personId), [people, personId]);
   const personEvents = useMemo(
@@ -52,8 +56,35 @@ const PersonProfile: React.FC<Props> = ({
     [events, personId]
   );
 
+  // Filter events by chosen period
+  const periodEvents = useMemo(() => {
+    if (statPeriod === 'all') return personEvents;
+    const today = getTodayDate();
+    const weekStart = getWeekStart();
+    const monthStart = getMonthStart();
+    return personEvents.filter((e) => {
+      if (statPeriod === 'today') return e.date === today;
+      if (statPeriod === 'week') return e.date >= weekStart;
+      if (statPeriod === 'month') return e.date >= monthStart;
+      return true;
+    });
+  }, [personEvents, statPeriod]);
+
+  // Per-type activity stats for the selected period
+  const activityStats = useMemo<ActivityStat[]>(() => {
+    return QUICK_ACTIONS.map((type) => {
+      const te = periodEvents.filter((e) => e.type === type);
+      return {
+        type,
+        count: te.length,
+        totalScore: te.reduce((s, e) => s + e.score, 0),
+        totalToman: te.reduce((s, e) => s + ((['personal_purchase', 'new_member_score'] as EventType[]).includes(e.type) ? e.rawValue : 0), 0),
+      };
+    });
+  }, [periodEvents]);
+
   const stats = useMemo(() => person ? getPersonStats(person, events) : null, [person, events]);
-  const allRanked = useMemo(() => getRankedPeople(people, events, 'total'), [people, events]);
+  const allRanked = useMemo(() => getRankedPeople(people, events, 'total', false), [people, events]);
   const rankInfo = useMemo(() => allRanked.find((r) => r.person.id === personId), [allRanked, personId]);
 
   if (!person || !stats) {
@@ -66,9 +97,14 @@ const PersonProfile: React.FC<Props> = ({
     );
   }
 
-  const handleToggleActive = () => {
-    onSavePerson({ ...person, isActive: !person.isActive });
+  // Build AI data — works even without rankInfo (inactive people)
+  const aiData = rankInfo ?? {
+    ...stats,
+    rank: allRanked.length + 1,
+    todayRank: 0, weekRank: 0, monthRank: 0,
   };
+
+  const handleToggleActive = () => onSavePerson({ ...person, isActive: !person.isActive });
 
   const handleSaveEvent = (event: OrgEvent) => {
     if (editingEvent) onUpdateEvent(event);
@@ -82,23 +118,15 @@ const PersonProfile: React.FC<Props> = ({
     setShowModal(true);
   };
 
-  const handleDeleteEvent = (id: string) => {
-    onDeleteEvent(id);
-    setConfirmDelete(null);
-  };
-
-  const handleDeletePerson = () => {
-    onDeletePerson(person.id);
-    nav.back();
-  };
+  const handleDeleteEvent = (id: string) => { onDeleteEvent(id); setConfirmDelete(null); };
+  const handleDeletePerson = () => { onDeletePerson(person.id); nav.back(); };
 
   const handleGenerateAI = async () => {
-    if (!rankInfo) return;
     const hasApiKey = !!(process.env.API_KEY || process.env.GEMINI_API_KEY);
     if (!hasApiKey) { setAiError('کلید Gemini API تنظیم نشده است.'); return; }
     setAiLoading(true); setAiError(''); setAiMessage('');
     try {
-      const msg = await generatePersonalMessage(rankInfo);
+      const msg = await generatePersonalMessage(aiData);
       setAiMessage(msg);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : 'خطا در تولید پیام');
@@ -110,6 +138,15 @@ const PersonProfile: React.FC<Props> = ({
   const handleCopyAI = async () => {
     if (!aiMessage) return;
     try { await navigator.clipboard.writeText(aiMessage); setAiCopied(true); setTimeout(() => setAiCopied(false), 2500); } catch { /* ignore */ }
+  };
+
+  const handleCopyStats = async () => {
+    const text = buildActivityStatsText(person, activityStats, statPeriod);
+    try { await navigator.clipboard.writeText(text); setStatsCopied(true); setTimeout(() => setStatsCopied(false), 2500); } catch { /* ignore */ }
+  };
+
+  const handleExportStatsImage = () => {
+    exportActivityStatsImage(person, activityStats, statPeriod);
   };
 
   const statItems = [
@@ -128,13 +165,13 @@ const PersonProfile: React.FC<Props> = ({
           <div className="flex-1" />
           <button
             onClick={() => nav.go('edit-person', { personId })}
-            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+            className="text-slate-400 hover:text-slate-200 text-sm px-3 py-1 rounded-lg border border-slate-700 transition-colors"
           >
             ✏️ ویرایش
           </button>
           <button
             onClick={() => setConfirmDeletePerson(true)}
-            className="text-red-400 hover:text-red-300 text-sm px-3 py-1 rounded-lg border border-red-900/50 hover:border-red-700 transition-colors"
+            className="text-red-400 hover:text-red-300 text-sm px-3 py-1 rounded-lg border border-red-900/50 transition-colors"
           >
             🗑️
           </button>
@@ -152,9 +189,7 @@ const PersonProfile: React.FC<Props> = ({
                 {person.isActive ? '● فعال' : '● غیرفعال'}
               </span>
               {rankInfo && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/40 text-violet-400">
-                  رتبه {rankInfo.rank}
-                </span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/40 text-violet-400">رتبه {rankInfo.rank}</span>
               )}
               <button onClick={handleToggleActive} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 {person.isActive ? 'غیرفعال کن' : 'فعال کن'}
@@ -163,7 +198,7 @@ const PersonProfile: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Stats row */}
+        {/* Score overview */}
         <div className="grid grid-cols-4 gap-2 mt-5">
           {statItems.map((item) => (
             <div key={item.label} className="bg-slate-800/80 rounded-xl p-2 text-center">
@@ -194,7 +229,7 @@ const PersonProfile: React.FC<Props> = ({
               }}
               className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/80 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 text-xs text-slate-300 font-medium transition-colors"
             >
-              📋 کپی متن کارت
+              📋 کپی کارت
             </button>
           </div>
         )}
@@ -223,74 +258,64 @@ const PersonProfile: React.FC<Props> = ({
       </div>
 
       {/* AI Personal Message */}
-      {rankInfo && (
-        <div className="px-4 py-4 bg-slate-900 border-b border-slate-800">
-          <div className="bg-gradient-to-br from-violet-900/30 to-indigo-900/20 border border-violet-800/40 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm font-bold text-violet-300">✨ پیام انگیزشی شخصی</p>
-                <p className="text-xs text-slate-500 mt-0.5">مخصوص {person.firstName}</p>
-              </div>
-              <button
-                onClick={handleGenerateAI}
-                disabled={aiLoading}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  aiLoading
-                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                    : 'bg-violet-600 hover:bg-violet-500 text-white'
-                }`}
-              >
-                {aiLoading ? <span className="animate-spin">⏳</span> : '🤖'}
-                {aiLoading ? 'در حال تولید...' : aiMessage ? 'دوباره' : 'تولید'}
-              </button>
+      <div className="px-4 py-4 bg-slate-900 border-b border-slate-800">
+        <div className="bg-gradient-to-br from-violet-900/30 to-indigo-900/20 border border-violet-800/40 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-bold text-violet-300">✨ پیام انگیزشی شخصی</p>
+              <p className="text-xs text-slate-500 mt-0.5">مخصوص {person.firstName}</p>
             </div>
-
-            {aiError && (
-              <p className="text-xs text-red-400 bg-red-900/20 rounded-xl px-3 py-2 mb-2">{aiError}</p>
-            )}
-
-            {aiMessage && (
-              <div className="mt-2">
-                <div className="bg-slate-800/80 rounded-xl p-3 mb-2">
-                  <p className="text-sm text-slate-100 leading-loose whitespace-pre-line" style={{ lineHeight: '1.9' }}>
-                    {aiMessage}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCopyAI}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                      aiCopied ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-                    }`}
-                  >
-                    {aiCopied ? '✓ کپی شد' : '📋 کپی'}
-                  </button>
-                  {typeof navigator !== 'undefined' && navigator.share && (
-                    <button
-                      onClick={async () => {
-                        try { await navigator.share({ text: aiMessage }); } catch { /* cancelled */ }
-                      }}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white transition-all"
-                    >
-                      📤 اشتراک‌گذاری
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+            <button
+              onClick={handleGenerateAI}
+              disabled={aiLoading}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                aiLoading ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-violet-600 hover:bg-violet-500 text-white'
+              }`}
+            >
+              {aiLoading ? <span className="animate-spin">⏳</span> : '🤖'}
+              {aiLoading ? 'در حال تولید...' : aiMessage ? 'دوباره' : 'تولید'}
+            </button>
           </div>
+
+          {aiError && (
+            <p className="text-xs text-red-400 bg-red-900/20 rounded-xl px-3 py-2 mb-2">{aiError}</p>
+          )}
+
+          {aiMessage && (
+            <div className="mt-2">
+              <div className="bg-slate-800/80 rounded-xl p-3 mb-2">
+                <p className="text-sm text-slate-100 leading-loose whitespace-pre-line" style={{ lineHeight: '1.9' }}>
+                  {aiMessage}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCopyAI}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${aiCopied ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+                >
+                  {aiCopied ? '✓ کپی شد' : '📋 کپی'}
+                </button>
+                {typeof navigator !== 'undefined' && navigator.share && (
+                  <button
+                    onClick={async () => { try { await navigator.share({ text: aiMessage }); } catch { /* cancelled */ } }}
+                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white transition-all"
+                  >
+                    📤 اشتراک‌گذاری
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Tabs */}
       <div className="flex border-b border-slate-800 bg-slate-900">
-        {[{ key: 'stats' as const, label: 'آمار' }, { key: 'history' as const, label: 'تاریخچه' }].map(({ key, label }) => (
+        {[{ key: 'stats' as const, label: '📊 آمار فعالیت‌ها' }, { key: 'history' as const, label: '📋 تاریخچه' }].map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex-1 py-3 text-sm font-medium transition-colors ${
-              activeTab === key ? 'text-violet-400 border-b-2 border-violet-400' : 'text-slate-500'
-            }`}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === key ? 'text-violet-400 border-b-2 border-violet-400' : 'text-slate-500'}`}
           >
             {label}
           </button>
@@ -300,28 +325,93 @@ const PersonProfile: React.FC<Props> = ({
       <div className="flex-1 p-4">
         {activeTab === 'stats' && (
           <div className="space-y-3">
-            <div className="bg-slate-800 rounded-2xl p-4">
-              <h3 className="text-sm font-bold text-slate-400 mb-3">خلاصه فعالیت‌ها</h3>
-              <div className="space-y-2">
-                {(['meeting_attendance', 'personal_purchase', 'presentation', 'new_member_score', 'level_up', 'agha_mohammad_meeting'] as const).map((type) => {
-                  const typeEvents = personEvents.filter((e) => e.type === type);
-                  if (typeEvents.length === 0) return null;
-                  const total = typeEvents.reduce((s, e) => s + e.score, 0);
+            {/* Period filter */}
+            <div className="flex gap-2">
+              {(['all', 'today', 'week', 'month'] as StatPeriod[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setStatPeriod(p)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                    statPeriod === p ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {PERIOD_LABELS[p]}
+                </button>
+              ))}
+            </div>
+
+            {/* Per-type breakdown */}
+            <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
+              <div className="px-4 py-3 border-b border-slate-700">
+                <h3 className="text-sm font-bold text-slate-300">آمار فعالیت‌ها — {PERIOD_LABELS[statPeriod]}</h3>
+              </div>
+              <div className="divide-y divide-slate-700/50">
+                {activityStats.every(s => s.count === 0) ? (
+                  <p className="text-center text-slate-500 text-sm py-6">هیچ فعالیتی در این بازه ثبت نشده</p>
+                ) : activityStats.map((s) => {
+                  if (s.count === 0) return null;
                   return (
-                    <div key={type} className="flex items-center gap-3">
-                      <span className="text-lg">{EVENT_TYPE_ICONS[type]}</span>
-                      <div className="flex-1">
-                        <div className="text-xs text-slate-400">{EVENT_TYPE_LABELS[type]}</div>
-                        <div className="text-xs text-slate-500">{typeEvents.length} بار</div>
+                    <div key={s.type} className="flex items-center gap-3 px-4 py-3">
+                      <span className="text-xl flex-shrink-0">{EVENT_TYPE_ICONS[s.type]}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-slate-200">{EVENT_TYPE_LABELS[s.type]}</div>
+                        {s.totalToman > 0 && (
+                          <div className="text-xs text-emerald-400 mt-0.5">
+                            {formatToman(s.totalToman)}
+                            {s.totalToman >= 1_000_000 && (
+                              <span className="text-slate-500 mr-1">
+                                ({formatNumber(s.totalToman / 1_000_000)} M)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm font-bold text-violet-400">{formatNumber(total)} امتیاز</div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-sm font-bold text-violet-400">{formatNumber(s.totalScore)} امتیاز</div>
+                        <div className="text-xs text-slate-500">{s.count} بار</div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              {personEvents.length === 0 && (
-                <p className="text-center text-slate-500 text-sm py-4">هنوز رویدادی ثبت نشده</p>
-              )}
+            </div>
+
+            {/* Totals summary */}
+            {activityStats.some(s => s.count > 0) && (
+              <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4 grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-xs text-slate-500 mb-1">جمع امتیاز</div>
+                  <div className="text-xl font-bold text-violet-400">
+                    {formatNumber(activityStats.reduce((s, a) => s + a.totalScore, 0))}
+                  </div>
+                </div>
+                {activityStats.some(s => s.totalToman > 0) && (
+                  <div className="text-center">
+                    <div className="text-xs text-slate-500 mb-1">جمع فروش</div>
+                    <div className="text-xl font-bold text-emerald-400">
+                      {formatNumber(activityStats.reduce((s, a) => s + a.totalToman, 0) / 1_000_000)} M
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Export bar */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyStats}
+                className={`flex-1 py-3 rounded-2xl border text-sm font-bold transition-all ${
+                  statsCopied ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                {statsCopied ? '✓ کپی شد' : '📋 کپی متن'}
+              </button>
+              <button
+                onClick={handleExportStatsImage}
+                className="flex-1 py-3 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold transition-colors"
+              >
+                🖼️ دانلود کارت
+              </button>
             </div>
           </div>
         )}
@@ -380,18 +470,8 @@ const PersonProfile: React.FC<Props> = ({
             <h3 className="text-lg font-bold text-slate-100 mb-2">حذف رویداد؟</h3>
             <p className="text-sm text-slate-400 mb-5">این رویداد حذف می‌شود و امتیازها دوباره محاسبه خواهند شد.</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 text-sm"
-              >
-                لغو
-              </button>
-              <button
-                onClick={() => handleDeleteEvent(confirmDelete)}
-                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold"
-              >
-                حذف کن
-              </button>
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 text-sm">لغو</button>
+              <button onClick={() => handleDeleteEvent(confirmDelete)} className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold">حذف کن</button>
             </div>
           </div>
         </div>
@@ -404,24 +484,14 @@ const PersonProfile: React.FC<Props> = ({
             <h3 className="text-lg font-bold text-red-400 mb-2">حذف {person.firstName} {person.lastName}؟</h3>
             <p className="text-sm text-slate-400 mb-5">تمام رویدادها و امتیازهای این فرد حذف خواهند شد. این عمل برگشت‌پذیر نیست.</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeletePerson(false)}
-                className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 text-sm"
-              >
-                لغو
-              </button>
-              <button
-                onClick={handleDeletePerson}
-                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold"
-              >
-                حذف نهایی
-              </button>
+              <button onClick={() => setConfirmDeletePerson(false)} className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 text-sm">لغو</button>
+              <button onClick={handleDeletePerson} className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold">حذف نهایی</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Event modal — keyed so it remounts on type or editing change */}
+      {/* Event modal */}
       {showModal && (
         <EventModal
           key={editingEvent?.id ?? `new-${modalDefaultType}`}
