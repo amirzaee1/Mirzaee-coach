@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Person, OrgEvent, AppSettings, Screen, TopTenPeriod, NavParams } from './types';
-import { getPeople, getEvents, getSettings, addRecentId } from './utils/storage';
+import { getPeople, getEvents, getSettings, addRecentId, savePeople, saveEvents, saveSettings } from './utils/storage';
+import { loadAllFromCloud, cloudUpsertPerson, cloudUpsertEvent, cloudDeleteEvent, cloudSaveSettings } from './utils/cloudStorage';
+import { isCloudEnabled } from './services/supabase';
 import Dashboard from './components/Dashboard';
 import PersonProfile from './components/PersonProfile';
 import AddEditPerson from './components/AddEditPerson';
@@ -10,12 +12,13 @@ import NightlyReport from './components/NightlyReport';
 import AIMessage from './components/AIMessage';
 import Settings from './components/Settings';
 import BottomNav from './components/BottomNav';
-import { savePeople, saveEvents, saveSettings } from './utils/storage';
 
 export interface AppNav {
   go: (screen: Screen, params?: NavParams) => void;
   back: () => void;
 }
+
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 const App: React.FC = () => {
   const [people, setPeople] = useState<Person[]>(() => getPeople());
@@ -24,11 +27,37 @@ const App: React.FC = () => {
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [navParams, setNavParams] = useState<NavParams>({});
   const [history, setHistory] = useState<{ screen: Screen; params: NavParams }[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [cloudLoaded, setCloudLoaded] = useState(false);
 
+  // Persist to localStorage on every state change
   useEffect(() => { savePeople(people); }, [people]);
   useEffect(() => { saveEvents(events); }, [events]);
   useEffect(() => { saveSettings(settings); }, [settings]);
 
+  // Load from Supabase on startup (once)
+  useEffect(() => {
+    if (!isCloudEnabled || cloudLoaded) return;
+    setSyncStatus('syncing');
+    loadAllFromCloud()
+      .then((data) => {
+        if (data) {
+          if (data.people.length > 0 || data.events.length > 0) {
+            setPeople(data.people);
+            setEvents(data.events);
+          }
+          if (data.settings) setSettings(data.settings);
+        }
+        setSyncStatus('synced');
+        setCloudLoaded(true);
+      })
+      .catch(() => {
+        setSyncStatus('error');
+        setCloudLoaded(true);
+      });
+  }, [cloudLoaded]);
+
+  // Navigation
   const go = useCallback((nextScreen: Screen, params: NavParams = {}) => {
     setHistory((h) => [...h, { screen, params: navParams }]);
     setScreen(nextScreen);
@@ -52,6 +81,19 @@ const App: React.FC = () => {
 
   const nav: AppNav = { go, back };
 
+  // Cloud sync helpers
+  const syncCloud = useCallback(async (fn: () => Promise<void>) => {
+    if (!isCloudEnabled) return;
+    setSyncStatus('syncing');
+    try {
+      await fn();
+      setSyncStatus('synced');
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
+
+  // CRUD handlers — update local state + push to cloud
   const handleSavePerson = useCallback((person: Person) => {
     setPeople((prev) => {
       const idx = prev.findIndex((p) => p.id === person.id);
@@ -62,24 +104,29 @@ const App: React.FC = () => {
       }
       return [...prev, person];
     });
-  }, []);
+    syncCloud(() => cloudUpsertPerson(person));
+  }, [syncCloud]);
 
   const handleAddEvent = useCallback((event: OrgEvent) => {
     setEvents((prev) => [...prev, event]);
     addRecentId(event.personId);
-  }, []);
+    syncCloud(() => cloudUpsertEvent(event));
+  }, [syncCloud]);
 
   const handleUpdateEvent = useCallback((event: OrgEvent) => {
     setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
-  }, []);
+    syncCloud(() => cloudUpsertEvent(event));
+  }, [syncCloud]);
 
   const handleDeleteEvent = useCallback((id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
-  }, []);
+    syncCloud(() => cloudDeleteEvent(id));
+  }, [syncCloud]);
 
   const handleSaveSettings = useCallback((s: AppSettings) => {
     setSettings(s);
-  }, []);
+    syncCloud(() => cloudSaveSettings(s));
+  }, [syncCloud]);
 
   const goToMainScreen = useCallback((s: Screen) => {
     setHistory([]);
@@ -91,7 +138,7 @@ const App: React.FC = () => {
   const renderScreen = () => {
     switch (screen) {
       case 'dashboard':
-        return <Dashboard people={people} events={events} nav={nav} />;
+        return <Dashboard people={people} events={events} nav={nav} syncStatus={syncStatus} />;
       case 'person-profile':
         return (
           <PersonProfile

@@ -1,14 +1,32 @@
 import React, { useState, useMemo } from 'react';
 import { Person, OrgEvent } from '../types';
-import { AppNav } from '../App';
+import { AppNav, SyncStatus } from '../App';
 import { getRankedPeople, getBestToday } from '../utils/scoring';
 import { getRecentIds } from '../utils/storage';
+import { isCloudEnabled } from '../services/supabase';
 import { getTodayDate, getWeekStart, getMonthStart, formatNumber, formatJalaliDate } from '../utils/date';
 
 interface Props {
   people: Person[];
   events: OrgEvent[];
   nav: AppNav;
+  syncStatus: SyncStatus;
+}
+
+function SyncBadge({ status }: { status: SyncStatus }) {
+  if (!isCloudEnabled) return null;
+  const cfg = {
+    idle:    { text: 'آفلاین', cls: 'text-slate-500', dot: 'bg-slate-600' },
+    syncing: { text: 'در حال همگام‌سازی...', cls: 'text-blue-400', dot: 'bg-blue-400 animate-pulse' },
+    synced:  { text: 'ذخیره در فضای ابری', cls: 'text-emerald-400', dot: 'bg-emerald-400' },
+    error:   { text: 'خطا در اتصال به ابر', cls: 'text-red-400', dot: 'bg-red-400' },
+  }[status];
+  return (
+    <div className={`flex items-center gap-1.5 text-xs ${cfg.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+      {cfg.text}
+    </div>
+  );
 }
 
 function SearchBar({ onSearch }: { onSearch: (q: string) => void }) {
@@ -33,7 +51,7 @@ function SearchBar({ onSearch }: { onSearch: (q: string) => void }) {
   );
 }
 
-const Dashboard: React.FC<Props> = ({ people, events, nav }) => {
+const Dashboard: React.FC<Props> = ({ people, events, nav, syncStatus }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const today = getTodayDate();
@@ -97,6 +115,7 @@ const Dashboard: React.FC<Props> = ({ people, events, nav }) => {
         <div>
           <h1 className="text-xl font-bold text-slate-100">میرزایی کوچ</h1>
           <p className="text-xs text-slate-400">{formatJalaliDate(today)}</p>
+          <SyncBadge status={syncStatus} />
         </div>
         <button
           onClick={() => nav.go('add-person')}
