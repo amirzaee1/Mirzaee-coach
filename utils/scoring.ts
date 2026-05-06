@@ -7,7 +7,9 @@ export function calculateEventScore(
   settings: AppSettings
 ): { score: number; pv?: number } {
   const coeff = settings.coefficients[type];
-  if (type === 'personal_purchase') {
+  // Both personal_purchase and new_member_score use PV model:
+  // amount (tomans) → PV = amount / 1_000_000 → score = PV × coeff
+  if (type === 'personal_purchase' || type === 'new_member_score') {
     const pv = rawValue / 1_000_000;
     return { score: pv * coeff, pv };
   }

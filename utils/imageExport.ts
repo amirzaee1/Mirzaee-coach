@@ -203,3 +203,183 @@ export function exportBestTodayImage(rp: RankedPerson): void {
 
   downloadCanvas(canvas, `best-today.png`);
 }
+
+// ── Person card (1080×1080 square) ────────────────────────────────────────
+
+export function exportPersonCard(rp: RankedPerson): void {
+  const CW = 1080, CH = 1080;
+  const canvas = document.createElement('canvas');
+  canvas.width = CW;
+  canvas.height = CH;
+  const ctx = canvas.getContext('2d')!;
+  ctx.direction = 'rtl';
+
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, CW, CH);
+  grad.addColorStop(0, '#0f0c29');
+  grad.addColorStop(1, '#1a1040');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Decorative glow
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#7c3aed';
+  ctx.beginPath();
+  ctx.arc(CW * 0.85, CH * 0.15, 300, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  const name = `${rp.person.firstName} ${rp.person.lastName}`;
+  const date = getTodayJalali();
+
+  // Rank badge
+  const badge = RANK_BADGES[rp.rank];
+  if (badge) {
+    drawText(ctx, badge, CW / 2, 130, 90, '#f59e0b', 'center');
+  } else {
+    drawText(ctx, `رتبه ${rp.rank}`, CW / 2, 130, 55, '#a78bfa', 'center', true);
+  }
+
+  // Avatar circle
+  ctx.fillStyle = rp.rank === 1 ? '#d97706' : '#6d28d9';
+  ctx.beginPath();
+  ctx.arc(CW / 2, 290, 100, 0, Math.PI * 2);
+  ctx.fill();
+  drawText(ctx, rp.person.firstName[0], CW / 2, 293, 90, '#fff', 'center', true);
+
+  // Name
+  drawText(ctx, name, CW / 2, 440, 64, '#f8fafc', 'center', true);
+  if (rp.person.team) {
+    drawText(ctx, rp.person.team, CW / 2, 510, 36, '#94a3b8', 'center');
+  }
+  drawText(ctx, date, CW / 2, 560, 30, '#64748b', 'center');
+
+  // Divider
+  ctx.strokeStyle = '#7c3aed';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(120, 595);
+  ctx.lineTo(CW - 120, 595);
+  ctx.stroke();
+
+  // Stats grid (2×2)
+  const statsData = [
+    { label: 'امتیاز کل', val: formatNumber(rp.totalScore), color: '#a78bfa' },
+    { label: 'امتیاز هفته', val: formatNumber(rp.weekScore), color: '#34d399' },
+    { label: 'امتیاز امروز', val: formatNumber(rp.todayScore), color: '#fbbf24' },
+    { label: 'PV کل', val: formatNumber(rp.totalPV), color: '#60a5fa' },
+  ];
+
+  const cellW = (CW - 120) / 2;
+  const cellH = 160;
+  const startX = 60;
+  const startY = 630;
+
+  statsData.forEach((s, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = startX + col * cellW;
+    const y = startY + row * cellH;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.beginPath();
+    ctx.roundRect(x + 8, y + 8, cellW - 16, cellH - 16, 20);
+    ctx.fill();
+
+    drawText(ctx, s.val, x + cellW / 2, y + cellH / 2 - 15, 52, s.color, 'center', true);
+    drawText(ctx, s.label, x + cellW / 2, y + cellH / 2 + 38, 28, '#94a3b8', 'center');
+  });
+
+  // Footer
+  drawText(ctx, '🔥 میرزایی کوچ', CW / 2, CH - 40, 30, '#4c1d95', 'center');
+
+  downloadCanvas(canvas, `card-${rp.person.firstName}.png`);
+}
+
+// ── Rankings image (all visible ranked people) ────────────────────────────
+
+export function exportRankingsImage(ranked: ReturnType<typeof Array.prototype.slice>, title: string): void {
+  const rows = (ranked as RankedPerson[]).slice(0, 20);
+  const rowH = 90;
+  const headerH = 220;
+  const footerH = 80;
+  const H_canvas = headerH + rows.length * rowH + footerH;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = Math.max(H_canvas, 600);
+  const ctx = canvas.getContext('2d')!;
+  ctx.direction = 'rtl';
+
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#0f0c29');
+  grad.addColorStop(1, '#120024');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, canvas.height);
+
+  // Header
+  drawText(ctx, '🏆', W / 2, 80, 70, '#f59e0b', 'center');
+  drawText(ctx, title, W / 2, 155, 56, '#f8fafc', 'center', true);
+  drawText(ctx, getTodayJalali(), W / 2, 200, 32, '#94a3b8', 'center');
+
+  // Rows
+  rows.forEach((rp, i) => {
+    const rank = i + 1;
+    const y = headerH + i * rowH;
+    const badge = RANK_BADGES[rank];
+
+    // Row bg
+    ctx.fillStyle = rank === 1
+      ? 'rgba(245,158,11,0.15)'
+      : rank <= 3 ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.03)';
+    ctx.beginPath();
+    ctx.roundRect(60, y + 6, W - 120, rowH - 10, 12);
+    ctx.fill();
+
+    // Rank
+    const rankColor = rank === 1 ? '#f59e0b' : rank === 2 ? '#94a3b8' : rank === 3 ? '#cd7f32' : '#64748b';
+    drawText(ctx, badge ?? String(rank), 130, y + rowH / 2, 36, rankColor, 'center', true);
+
+    // Name
+    const nameColor = rank <= 3 ? '#f1f5f9' : '#cbd5e1';
+    const name = `${(rp as RankedPerson).person.firstName} ${(rp as RankedPerson).person.lastName}`;
+    drawText(ctx, name, W - 220, y + rowH / 2, 34, nameColor, 'right', rank <= 3);
+
+    // Score
+    drawText(ctx, formatNumber((rp as RankedPerson).totalScore), 250, y + rowH / 2, 34, '#a78bfa', 'left', true);
+  });
+
+  // Footer
+  drawText(ctx, '🔥 میرزایی کوچ', W / 2, canvas.height - 30, 28, '#4c1d95', 'center');
+
+  downloadCanvas(canvas, 'rankings.png');
+}
+
+// ── Share via Web Share API or fall back to download ──────────────────────
+
+export async function shareCanvasImage(
+  canvas: HTMLCanvasElement,
+  filename: string,
+  text: string
+): Promise<void> {
+  return new Promise((resolve) => {
+    canvas.toBlob(async (blob) => {
+      if (!blob) { resolve(); return; }
+      const file = new File([blob], filename, { type: 'image/png' });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try { await navigator.share({ files: [file], text }); } catch { /* cancelled */ }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      resolve();
+    }, 'image/png');
+  });
+}

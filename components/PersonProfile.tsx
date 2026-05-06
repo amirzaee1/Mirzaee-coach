@@ -4,6 +4,8 @@ import { AppNav } from '../App';
 import { getPersonStats, getRankedPeople } from '../utils/scoring';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_ICONS, EVENT_TYPE_COLORS } from '../constants';
 import { formatJalaliDateTime, formatNumber, formatToman } from '../utils/date';
+import { exportPersonCard } from '../utils/imageExport';
+import { buildPersonCardText } from '../utils/textExport';
 import EventModal from './EventModal';
 
 interface Props {
@@ -119,6 +121,27 @@ const PersonProfile: React.FC<Props> = ({
         {stats.totalPV > 0 && (
           <div className="mt-2 bg-emerald-900/30 border border-emerald-800/50 rounded-xl px-4 py-2 text-sm text-emerald-400 text-center">
             مجموع PV: {formatNumber(stats.totalPV)}
+          </div>
+        )}
+
+        {/* Share row */}
+        {rankInfo && (
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => exportPersonCard(rankInfo)}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/80 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 text-xs text-slate-300 font-medium transition-colors"
+            >
+              🖼️ دانلود کارت
+            </button>
+            <button
+              onClick={async () => {
+                const text = buildPersonCardText(rankInfo);
+                try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/80 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 text-xs text-slate-300 font-medium transition-colors"
+            >
+              📋 کپی متن کارت
+            </button>
           </div>
         )}
       </div>

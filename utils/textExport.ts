@@ -45,6 +45,40 @@ export function buildBestTodayText(rp: RankedPerson): string {
   ].filter(Boolean).join('\n');
 }
 
+export function buildPersonCardText(rp: RankedPerson): string {
+  const name = `${rp.person.firstName} ${rp.person.lastName}`;
+  const badge = RANK_BADGES[rp.rank] ?? `رتبه ${rp.rank}`;
+  const date = getTodayJalali();
+  const lines = [
+    `${badge} ${name}`,
+    rp.person.team ? `تیم: ${rp.person.team}` : '',
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+    `امتیاز کل: ${formatNumber(rp.totalScore)}`,
+    `امتیاز هفته: ${formatNumber(rp.weekScore)}`,
+    `امتیاز امروز: ${formatNumber(rp.todayScore)}`,
+    rp.totalPV > 0 ? `PV کل: ${formatNumber(rp.totalPV)}` : '',
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+    `📅 ${date}`,
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+export function buildRankingsText(ranked: RankedPerson[], title: string): string {
+  const date = getTodayJalali();
+  const lines: string[] = [
+    `🏆 ${title} | ${date}`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+  ];
+  ranked.slice(0, 20).forEach((rp, i) => {
+    const rank = i + 1;
+    const badge = RANK_BADGES[rank] ?? `${rank}.`;
+    const name = `${rp.person.firstName} ${rp.person.lastName}`;
+    lines.push(`${badge} ${name} — ${formatNumber(rp.totalScore)} امتیاز`);
+  });
+  lines.push(`━━━━━━━━━━━━━━━━━━━━━━`);
+  return lines.join('\n');
+}
+
 export function buildNightlyReportText(
   topWeek: RankedPerson[],
   bestToday: RankedPerson | null

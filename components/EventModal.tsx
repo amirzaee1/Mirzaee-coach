@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EventType, OrgEvent, AppSettings } from '../types';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_ICONS } from '../constants';
 import { calculateEventScore } from '../utils/scoring';
-import { getTodayDate } from '../utils/date';
+import { getTodayDate, formatNumber } from '../utils/date';
 
 interface Props {
   personId: string;
@@ -22,6 +22,24 @@ const EVENT_TYPES: EventType[] = [
   'agha_mohammad_meeting',
 ];
 
+// Convert Persian/Arabic digits to ASCII, strip non-numerics
+function toAsciiDigits(str: string): string {
+  return str
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[^\d]/g, '');
+}
+
+// Format number with Persian thousands separator
+function formatThousands(val: string): string {
+  const digits = toAsciiDigits(val);
+  if (!digits) return '';
+  return parseInt(digits, 10).toLocaleString('fa-IR');
+}
+
+// Types where input is in Tomans (amount → PV → score)
+const TOMAN_TYPES: EventType[] = ['personal_purchase', 'new_member_score'];
+
 const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEvent, onSave, onClose }) => {
   const [selectedType, setSelectedType] = useState<EventType>(editingEvent?.type ?? 'meeting_attendance');
   const [rawValue, setRawValue] = useState<string>(
@@ -38,14 +56,19 @@ const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEv
   }, [editingEvent]);
 
   const isMeeting = selectedType === 'meeting_attendance';
-  const isPurchase = selectedType === 'personal_purchase';
+  const isTomanType = TOMAN_TYPES.includes(selectedType);
 
-  const parsedValue = parseFloat(rawValue.replace(/,/g, '')) || 0;
+  // Always store rawValue as ASCII digits
+  const parsedValue = parseInt(toAsciiDigits(rawValue), 10) || 0;
   const { score, pv } = calculateEventScore(selectedType, isMeeting ? 1 : parsedValue, settings);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = toAsciiDigits(e.target.value);
+    setRawValue(digits);
+  };
 
   const handleSubmit = () => {
     if (!isMeeting && !parsedValue) return;
-
     const event: OrgEvent = {
       id: editingEvent?.id ?? crypto.randomUUID(),
       personId,
@@ -61,20 +84,13 @@ const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEv
     onClose();
   };
 
-  const formatInput = (val: string) => {
-    const digits = val.replace(/\D/g, '');
-    return digits ? parseInt(digits).toLocaleString('fa-IR') : '';
-  };
-
   const inputLabel =
-    isPurchase ? 'مبلغ خرید (تومان)' :
-    selectedType === 'new_member_score' ? 'امتیاز ورودی' :
+    selectedType === 'personal_purchase' ? 'مبلغ خرید (تومان)' :
+    selectedType === 'new_member_score'   ? 'مبلغ فروش ورودی (تومان)' :
     'تعداد';
 
   const inputPlaceholder =
-    isPurchase ? 'مثلاً: ۱٬۰۰۰٬۰۰۰' :
-    selectedType === 'new_member_score' ? 'امتیاز ورودی را وارد کن' :
-    'تعداد را وارد کن';
+    isTomanType ? 'مثلاً: ۱۰۰۰۰۰۰' : 'تعداد را وارد کن';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
@@ -83,7 +99,6 @@ const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEv
         className="relative w-full max-w-lg bg-slate-900 rounded-t-3xl border-t border-slate-700 p-5 pb-8 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Handle */}
         <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center justify-between mb-4">
@@ -118,15 +133,17 @@ const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEv
             <input
               type="text"
               inputMode="numeric"
-              value={isPurchase ? formatInput(rawValue) : rawValue}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^\d]/g, '');
-                setRawValue(val);
-              }}
+              value={isTomanType ? formatThousands(rawValue) : rawValue}
+              onChange={handleChange}
               placeholder={inputPlaceholder}
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 text-base"
               autoFocus
             />
+            {isTomanType && parsedValue > 0 && (
+              <p className="text-xs text-slate-500 mt-1.5 pr-1">
+                معادل: {formatNumber(parsedValue / 1_000_000)} PV
+              </p>
+            )}
           </div>
         )}
 
@@ -135,17 +152,25 @@ const EventModal: React.FC<Props> = ({ personId, personName, settings, editingEv
           <div className="flex-1">
             <div className="text-xs text-slate-400 mb-1">امتیاز محاسبه‌شده</div>
             <div className="text-2xl font-bold text-violet-400">
-              {(!isMeeting && !parsedValue) ? '—' : score.toFixed(1).replace(/\.0$/, '')}
+              {(!isMeeting && !parsedValue) ? '—' : formatNumber(score)}
             </div>
           </div>
-          {pv !== undefined && parsedValue > 0 && (
+          {pv !== undefined && pv > 0 && (
             <div className="flex-1 border-r border-slate-700 pr-4">
               <div className="text-xs text-slate-400 mb-1">PV</div>
-              <div className="text-2xl font-bold text-emerald-400">{pv.toFixed(2).replace(/\.?0+$/, '')}</div>
+              <div className="text-2xl font-bold text-emerald-400">{formatNumber(pv)}</div>
             </div>
           )}
           <div className="text-3xl">{EVENT_TYPE_ICONS[selectedType]}</div>
         </div>
+
+        {/* Formula hint for toman types */}
+        {isTomanType && parsedValue > 0 && (
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 mb-4 text-xs text-slate-400 leading-relaxed">
+            {formatNumber(parsedValue)} ÷ ۱,۰۰۰,۰۰۰ = {formatNumber(pv ?? 0)} PV
+            &nbsp;×&nbsp;{settings.coefficients[selectedType]} = <span className="text-violet-400 font-bold">{formatNumber(score)} امتیاز</span>
+          </div>
+        )}
 
         {/* Note */}
         <div className="mb-5">

@@ -4,6 +4,8 @@ import { AppNav } from '../App';
 import { getRankedPeople } from '../utils/scoring';
 import { RANK_BADGES } from '../constants';
 import { formatNumber } from '../utils/date';
+import { exportRankingsImage } from '../utils/imageExport';
+import { buildRankingsText } from '../utils/textExport';
 
 interface Props {
   people: Person[];
@@ -23,6 +25,7 @@ const Rankings: React.FC<Props> = ({ people, events, nav }) => {
   const [teamFilter, setTeamFilter] = useState('');
   const [searchQ, setSearchQ] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const teams = useMemo(() => {
     const ts = Array.from(new Set(people.map((p) => p.team).filter(Boolean)));
@@ -188,6 +191,33 @@ const Rankings: React.FC<Props> = ({ people, events, nav }) => {
           );
         })}
       </div>
+
+      {/* Share bar */}
+      {filtered.length > 0 && (
+        <div className="sticky bottom-16 p-4 bg-slate-950/95 border-t border-slate-800">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={async () => {
+                const sortLabel = sortBy === 'total' ? 'کل' : sortBy === 'today' ? 'امروز' : sortBy === 'week' ? 'هفته' : 'ماه';
+                const text = buildRankingsText(filtered, `رتبه‌بندی ${sortLabel}`);
+                try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
+              }}
+              className={`py-3 rounded-2xl border text-sm font-bold transition-all ${copied ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'}`}
+            >
+              {copied ? '✓ کپی شد' : '📋 کپی متن'}
+            </button>
+            <button
+              onClick={() => {
+                const sortLabel = sortBy === 'total' ? 'کل' : sortBy === 'today' ? 'امروز' : sortBy === 'week' ? 'هفته' : 'ماه';
+                exportRankingsImage(filtered, `رتبه‌بندی ${sortLabel}`);
+              }}
+              className="py-3 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold transition-colors"
+            >
+              🖼️ دانلود تصویر
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
