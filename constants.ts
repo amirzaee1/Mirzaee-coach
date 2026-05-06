@@ -1,26 +1,58 @@
+import { AppSettings, EventType } from './types';
 
-export const GEMINI_MODEL_NAME = "gemini-2.5-flash-preview-04-17";
+export const DEFAULT_SETTINGS: AppSettings = {
+  coefficients: {
+    meeting_attendance: 1,
+    personal_purchase: 3,
+    presentation: 3,
+    new_member_score: 3,
+    level_up: 10,
+    agha_mohammad_meeting: 3,
+  },
+  pvPerMillion: 1,
+};
 
-export const AI_SYSTEM_PROMPT = `تو یک مربی هوش مصنوعی هستی مخصوص نتورکرهای فارسی‌زبان. نقش تو اینه که به مخاطب کمک کنی در مسیر رشدش در بازاریابی شبکه‌ای (نتورک مارکتینگ) تصمیم درست بگیره، انگیزه پیدا کنه، آموزش ببینه و بهتر عمل کنه.
+export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  meeting_attendance: 'حضور در جلسه',
+  personal_purchase: 'خرید شخصی',
+  presentation: 'پرزنت / معارفه',
+  new_member_score: 'امتیاز ورودی جدید',
+  level_up: 'لول آپ',
+  agha_mohammad_meeting: 'جلسه آقا محمد',
+};
 
-همیشه با لحن الهام‌بخش، صمیمی و با انگیزه صحبت کن، انگار یک لیدر واقعی داری باهاش حرف می‌زنی.
+export const EVENT_TYPE_ICONS: Record<EventType, string> = {
+  meeting_attendance: '📋',
+  personal_purchase: '🛒',
+  presentation: '🎤',
+  new_member_score: '👥',
+  level_up: '⬆️',
+  agha_mohammad_meeting: '🤝',
+};
 
-هر وقت کاربر سوال یا مشکلی مطرح کرد، ابتدا در ذهن خودت مشخص کن سؤالش در کدام حوزه است (مثلاً: مهارت عملی – مشکل ذهنی – ضعف انگیزشی – پیگیری فروش – کار با تیم – اعتراض ورودی و...). سپس بر اساس آن دسته‌بندی، پاسخ مناسبی ارائه بده. این دسته‌بندی را به کاربر نشان نده، فقط برای راهنمایی خودت در پاسخ دادن استفاده کن.
+export const EVENT_TYPE_COLORS: Record<EventType, string> = {
+  meeting_attendance: 'bg-blue-500',
+  personal_purchase: 'bg-emerald-500',
+  presentation: 'bg-purple-500',
+  new_member_score: 'bg-orange-500',
+  level_up: 'bg-red-500',
+  agha_mohammad_meeting: 'bg-yellow-500',
+};
 
-ویژگی پاسخ‌هات:
-- خلاصه، مفید، کاربردی، انگیزشی (حدود ۳ تا ۵ جمله).
-- برای سؤالات ذهنی یا درونی (مثل شک، ترس، کمبود ایمان)، جمله پایانی‌ت حتماً باید الهام‌بخش و قدرتمند باشه (مثلاً: «قهرمان درونت رو بیدار کن، دنیا منتظر درخشش توئه!» یا «باورتو به اندازه‌ی آرزوهات بزرگ کن، اتفاقات بزرگ در راهن.»).
-- برای سؤالات مهارتی (مثل دعوت، فالو، بستن فروش، پرزنت)، پاسخ مشخص، مرحله‌به‌مرحله (در صورت لزوم) و ساده بده.
+export const WEEKLY_PRIZES: Record<number, number> = {
+  1: 1_000_000,
+  2: 700_000,
+  3: 500_000,
+};
 
-به زبان فارسی و کاملاً روان و طبیعی جواب بده. لحن پاسخ‌هات باید شبیه یک مربی انسانی و حرفه‌ای باشه، نه ربات.
+export const MONTHLY_PRIZES: Record<number, number> = {
+  1: 2_000_000,
+};
 
-در انتهای هر پاسخ، یک سؤال هوشمند و مرتبط با بحث بپرس تا بتونی به راهنمایی ادامه بدی و مکالمه را پویا نگه داری. مثلاً:
-«چه فکر یا چالشی همین الان ذهنت رو درگیر کرده که بخوایم با هم بررسیش کنیم؟»
-«برای برداشتن قدم بعدی، چه اطلاعات یا مهارتی فکر می‌کنی بیشتر بهت کمک می‌کنه؟»
-«آماده‌ای تا روی یکی از این مهارت‌ها عمیق‌تر بشیم و تمرین کنیم؟»
+export const RANK_BADGES: Record<number, string> = {
+  1: '🥇',
+  2: '🥈',
+  3: '🥉',
+};
 
-هر بار فقط به یک سؤال کاربر پاسخ بده، کامل و هوشمند.
-
-به یاد داشته باش که هرگز API Key یا موارد فنی دیگر را از کاربر نپرسی یا در مورد آن صحبت نکنی. تمرکزت فقط روی مربیگری نتورک مارکتینگ باشد.`;
-
-export const INITIAL_AI_MESSAGE = "سلام به روی ماهت، قهرمان آینده! من مربی هوش مصنوعی تو هستم و اومدم تا در مسیر طلایی بازاریابی شبکه‌ای، قدم به قدم همراهت باشم. آماده‌ای تا امروز با هم بدرخشیم؟ چه چیزی در ذهن توانمندت می‌گذره که می‌خوای با من در میون بذاری؟";
+export const GEMINI_MODEL = 'gemini-2.0-flash';
