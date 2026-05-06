@@ -61,9 +61,15 @@ export type Screen =
 export type TopTenPeriod = 'today' | 'week' | 'month';
 export type SortBy = 'total' | 'today' | 'week' | 'month';
 
+export interface Prizes {
+  weekly: Record<number, number>;   // rank → amount in tomans
+  monthly: Record<number, number>;
+}
+
 export interface AppSettings {
   coefficients: Record<EventType, number>;
   pvPerMillion: number;
+  prizes: Prizes;
 }
 
 export interface NavParams {

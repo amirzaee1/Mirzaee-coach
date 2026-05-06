@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Person, OrgEvent } from '../types';
+import { Person, OrgEvent, AppSettings } from '../types';
 import { AppNav } from '../App';
 import { getTopTen, getBestToday } from '../utils/scoring';
-import { RANK_BADGES, WEEKLY_PRIZES } from '../constants';
+import { RANK_BADGES } from '../constants';
 import { formatNumber, formatToman, getTodayJalali } from '../utils/date';
 import { exportTopTenImage, exportBestTodayImage } from '../utils/imageExport';
 import { buildNightlyReportText, buildBestTodayText, buildTopTenText } from '../utils/textExport';
@@ -10,10 +10,11 @@ import { buildNightlyReportText, buildBestTodayText, buildTopTenText } from '../
 interface Props {
   people: Person[];
   events: OrgEvent[];
+  settings: AppSettings;
   nav: AppNav;
 }
 
-const NightlyReport: React.FC<Props> = ({ people, events, nav }) => {
+const NightlyReport: React.FC<Props> = ({ people, events, settings, nav }) => {
   const [copied, setCopied] = useState<'all' | 'week' | 'today' | null>(null);
 
   const topWeek = useMemo(() => getTopTen(people, events, 'week'), [people, events]);
@@ -76,7 +77,7 @@ const NightlyReport: React.FC<Props> = ({ people, events, nav }) => {
                 {copied === 'week' ? '✓ کپی' : '📋 متن'}
               </button>
               <button
-                onClick={() => exportTopTenImage(topWeek, 'week')}
+                onClick={() => exportTopTenImage(topWeek, 'week', settings)}
                 className="text-xs px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 transition-all"
               >
                 🖼️ تصویر
@@ -92,7 +93,7 @@ const NightlyReport: React.FC<Props> = ({ people, events, nav }) => {
             <div className="divide-y divide-slate-700/50">
               {topWeek.map((rp, i) => {
                 const rank = i + 1;
-                const prize = WEEKLY_PRIZES[rank];
+                const prize = settings.prizes.weekly[rank];
                 return (
                   <div key={rp.person.id} className="flex items-center gap-3 px-4 py-3">
                     <span className="text-xl w-7 text-center flex-shrink-0">

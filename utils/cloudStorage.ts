@@ -29,6 +29,7 @@ interface DbSettings {
   id: string;
   coefficients: Record<string, number>;
   pv_per_million: number;
+  prizes?: { weekly: Record<number, number>; monthly: Record<number, number> };
 }
 
 function personToDb(p: Person): DbPerson {
@@ -109,6 +110,10 @@ export async function loadAllFromCloud(): Promise<CloudData | null> {
           ...(settingsRes.data as DbSettings).coefficients,
         },
         pvPerMillion: (settingsRes.data as DbSettings).pv_per_million,
+        prizes: {
+          weekly:  { ...DEFAULT_SETTINGS.prizes.weekly,  ...((settingsRes.data as DbSettings).prizes?.weekly  ?? {}) },
+          monthly: { ...DEFAULT_SETTINGS.prizes.monthly, ...((settingsRes.data as DbSettings).prizes?.monthly ?? {}) },
+        },
       }
     : null;
 
@@ -149,6 +154,7 @@ export async function cloudSaveSettings(settings: AppSettings): Promise<void> {
     id: 'default',
     coefficients: settings.coefficients as Record<string, number>,
     pv_per_million: settings.pvPerMillion,
+    prizes: settings.prizes,
   };
   const { error } = await supabase.from('settings').upsert(row);
   if (error) throw new Error(error.message);

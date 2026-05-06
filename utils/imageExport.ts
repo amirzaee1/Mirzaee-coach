@@ -1,41 +1,64 @@
-import { RankedPerson } from '../types';
-import { RANK_BADGES, WEEKLY_PRIZES, MONTHLY_PRIZES } from '../constants';
+import { RankedPerson, AppSettings } from '../types';
+import { RANK_BADGES } from '../constants';
 import { getTodayJalali, formatNumber, formatToman } from './date';
 
-const W = 1080;
-const H = 1920;
+const SZ = 1080; // all images are 1080×1080
 const FONT = 'Vazirmatn, Tahoma, Arial';
 
-function setupCanvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeCanvas(): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas');
+  c.width = SZ;
+  c.height = SZ;
+  const ctx = c.getContext('2d')!;
   ctx.direction = 'rtl';
-  return [canvas, ctx];
+  return [c, ctx];
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D) {
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, '#0f0c29');
-  grad.addColorStop(0.5, '#1a1040');
-  grad.addColorStop(1, '#120024');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+function drawBg(ctx: CanvasRenderingContext2D, style: 'dark' | 'gold' | 'green' = 'dark') {
+  let g: CanvasGradient;
+  if (style === 'gold') {
+    g = ctx.createLinearGradient(0, 0, SZ, SZ);
+    g.addColorStop(0, '#1c0f00');
+    g.addColorStop(0.6, '#2d1a00');
+    g.addColorStop(1, '#0f0900');
+  } else if (style === 'green') {
+    g = ctx.createLinearGradient(0, 0, SZ, SZ);
+    g.addColorStop(0, '#001a10');
+    g.addColorStop(0.6, '#00261a');
+    g.addColorStop(1, '#001208');
+  } else {
+    g = ctx.createLinearGradient(0, 0, SZ, SZ);
+    g.addColorStop(0, '#0d0b1e');
+    g.addColorStop(0.5, '#130f2e');
+    g.addColorStop(1, '#0a0818');
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, SZ, SZ);
 
-  // decorative circles
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = '#a855f7';
-  ctx.beginPath();
-  ctx.arc(W * 0.85, H * 0.08, 280, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(W * 0.15, H * 0.92, 220, 0, Math.PI * 2);
-  ctx.fill();
+  // subtle grid pattern
+  ctx.globalAlpha = 0.04;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= SZ; x += 60) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, SZ); ctx.stroke();
+  }
+  for (let y = 0; y <= SZ; y += 60) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(SZ, y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // glow circles
+  ctx.globalAlpha = 0.10;
+  const accent = style === 'gold' ? '#f59e0b' : style === 'green' ? '#10b981' : '#7c3aed';
+  ctx.fillStyle = accent;
+  ctx.beginPath(); ctx.arc(SZ * 0.85, SZ * 0.12, 260, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(SZ * 0.15, SZ * 0.88, 200, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-function drawText(
+function txt(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
@@ -43,53 +66,87 @@ function drawText(
   size: number,
   color: string,
   align: CanvasTextAlign = 'center',
-  bold = false
+  weight: '400' | '700' = '400'
 ) {
-  ctx.font = `${bold ? '700' : '400'} ${size}px ${FONT}`;
+  ctx.font = `${weight} ${size}px ${FONT}`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
 }
 
-function downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  r: number, fill: string, strokeColor?: string
+) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+  if (strokeColor) {
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function divider(ctx: CanvasRenderingContext2D, y: number, color = '#7c3aed', alpha = 0.5) {
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(80, y); ctx.lineTo(SZ - 80, y); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function watermark(ctx: CanvasRenderingContext2D) {
+  txt(ctx, '🔥 میرزایی کوچ', SZ / 2, SZ - 36, 26, '#ffffff', 'center', '700');
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = '#7c3aed';
+  ctx.beginPath(); ctx.roundRect(SZ / 2 - 120, SZ - 56, 240, 40, 20); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function download(canvas: HTMLCanvasElement, filename: string) {
   canvas.toBlob((blob) => {
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, 'image/png');
 }
 
-export function exportTopTenImage(ranked: RankedPerson[], period: 'today' | 'week' | 'month'): void {
-  const [canvas, ctx] = setupCanvas();
-  drawBackground(ctx);
+// ── Top 10 — 1080×1080 ───────────────────────────────────────────────────────
+
+export function exportTopTenImage(
+  ranked: RankedPerson[],
+  period: 'today' | 'week' | 'month',
+  settings?: AppSettings
+): void {
+  const [canvas, ctx] = makeCanvas();
+  drawBg(ctx, 'dark');
 
   const periodLabel = period === 'today' ? 'امروز' : period === 'week' ? 'هفته' : 'ماه';
-  const prizes = period === 'week' ? WEEKLY_PRIZES : period === 'month' ? MONTHLY_PRIZES : {} as Record<number,number>;
+  const prizes =
+    period === 'week'  ? (settings?.prizes.weekly  ?? {}) :
+    period === 'month' ? (settings?.prizes.monthly ?? {}) :
+    {} as Record<number, number>;
   const date = getTodayJalali();
-
-  // Header
-  drawText(ctx, '🏆', W / 2, 120, 80, '#f59e0b', 'center');
-  drawText(ctx, `تاپ ۱۰ ${periodLabel}`, W / 2, 210, 72, '#f8fafc', 'center', true);
-  drawText(ctx, date, W / 2, 290, 40, '#94a3b8', 'center');
-
-  // divider
-  ctx.strokeStyle = '#7c3aed';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(80, 330);
-  ctx.lineTo(W - 80, 330);
-  ctx.stroke();
-
   const top10 = ranked.slice(0, 10);
-  const rowH = 148;
-  const startY = 380;
+
+  // Header band
+  roundRect(ctx, 0, 0, SZ, 130, 0, 'rgba(124,58,237,0.18)');
+  txt(ctx, '🏆', 80, 65, 52, '#f59e0b', 'left');
+  txt(ctx, `تاپ ۱۰ ${periodLabel}`, SZ / 2 + 10, 55, 52, '#f8fafc', 'center', '700');
+  txt(ctx, date, SZ / 2 + 10, 100, 28, '#94a3b8', 'center');
+
+  divider(ctx, 130);
+
+  // Rows — 10 rows, each ~88px tall starting at y=140
+  const rowH = 88;
+  const startY = 140;
 
   top10.forEach((rp, i) => {
     const rank = i + 1;
@@ -99,264 +156,185 @@ export function exportTopTenImage(ranked: RankedPerson[], period: 'today' | 'wee
     const badge = RANK_BADGES[rank] ?? '';
 
     // row bg
-    const rowGrad = ctx.createLinearGradient(60, y, W - 60, y);
-    if (rank === 1) {
-      rowGrad.addColorStop(0, 'rgba(245,158,11,0.25)');
-      rowGrad.addColorStop(1, 'rgba(245,158,11,0.05)');
-    } else if (rank <= 3) {
-      rowGrad.addColorStop(0, 'rgba(124,58,237,0.2)');
-      rowGrad.addColorStop(1, 'rgba(124,58,237,0.04)');
-    } else {
-      rowGrad.addColorStop(0, 'rgba(255,255,255,0.06)');
-      rowGrad.addColorStop(1, 'rgba(255,255,255,0.01)');
-    }
-    ctx.fillStyle = rowGrad;
-    ctx.beginPath();
-    ctx.roundRect(60, y + 4, W - 120, rowH - 10, 16);
-    ctx.fill();
+    const rowBg =
+      rank === 1 ? 'rgba(245,158,11,0.18)' :
+      rank <= 3  ? 'rgba(124,58,237,0.14)' :
+      i % 2 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)';
+    roundRect(ctx, 50, y + 3, SZ - 100, rowH - 6, 14, rowBg);
 
-    // rank number
+    // rank
     const rankColor = rank === 1 ? '#f59e0b' : rank === 2 ? '#94a3b8' : rank === 3 ? '#cd7f32' : '#64748b';
-    drawText(ctx, badge || String(rank), 150, y + rowH / 2, 44, rankColor, 'center', true);
+    txt(ctx, badge || String(rank), 110, y + rowH / 2, rank <= 3 ? 32 : 26, rankColor, 'center', '700');
 
     // name
-    const nameColor = rank === 1 ? '#fef3c7' : rank <= 3 ? '#f1f5f9' : '#e2e8f0';
-    drawText(ctx, name, W - 220, y + rowH / 2 - 16, 38, nameColor, 'right', rank === 1);
+    const nameColor = rank === 1 ? '#fef3c7' : rank <= 3 ? '#f1f5f9' : '#cbd5e1';
+    txt(ctx, name, SZ - 160, y + rowH / 2 - (prizes[rank] ? 12 : 0), 30, nameColor, 'right', rank <= 3 ? '700' : '400');
 
     // score
-    const scoreText = `${formatNumber(score)} امتیاز`;
-    drawText(ctx, scoreText, W - 220, y + rowH / 2 + 22, 30, '#a78bfa', 'right');
+    txt(ctx, `${formatNumber(score)} امتیاز`, SZ - 160, y + rowH / 2 + (prizes[rank] ? 14 : 0), 22, '#a78bfa', 'right');
 
-    // prize
+    // prize badge
     if (prizes[rank]) {
-      drawText(ctx, `💰 ${formatToman(prizes[rank])}`, 240, y + rowH / 2, 28, '#fbbf24', 'left');
+      roundRect(ctx, 140, y + rowH / 2 - 18, 160, 36, 18, 'rgba(245,158,11,0.15)');
+      txt(ctx, `💰 ${formatToman(prizes[rank])}`, 222, y + rowH / 2, 20, '#fbbf24', 'center');
     }
   });
 
-  // footer
-  const footerY = H - 80;
-  ctx.strokeStyle = '#7c3aed';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(80, footerY - 20);
-  ctx.lineTo(W - 80, footerY - 20);
-  ctx.stroke();
-  drawText(ctx, '🔥 ادامه بده، رقابت ادامه داره!', W / 2, footerY + 20, 36, '#94a3b8', 'center');
-
-  downloadCanvas(canvas, `top10-${period}.png`);
+  watermark(ctx);
+  download(canvas, `top10-${period}.png`);
 }
+
+// ── Best Today hero card — 1080×1080 ─────────────────────────────────────────
 
 export function exportBestTodayImage(rp: RankedPerson): void {
-  const [canvas, ctx] = setupCanvas();
+  const [canvas, ctx] = makeCanvas();
+  drawBg(ctx, 'gold');
 
-  // Special background for hero card
-  const grad = ctx.createRadialGradient(W / 2, H * 0.4, 100, W / 2, H * 0.4, 800);
-  grad.addColorStop(0, '#2d1b69');
-  grad.addColorStop(0.6, '#0f0c29');
-  grad.addColorStop(1, '#000');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+  const name = `${rp.person.firstName} ${rp.person.lastName}`;
+  const date = getTodayJalali();
 
-  ctx.globalAlpha = 0.12;
+  // Crown glow
+  ctx.globalAlpha = 0.2;
   ctx.fillStyle = '#f59e0b';
-  ctx.beginPath();
-  ctx.arc(W / 2, H * 0.35, 500, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(SZ / 2, 310, 300, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
 
-  const name = `${rp.person.firstName} ${rp.person.lastName}`;
-  const date = getTodayJalali();
+  txt(ctx, '👑', SZ / 2, 160, 100, '#f59e0b');
+  txt(ctx, 'بیشترین اقدام امروز', SZ / 2, 270, 46, '#fef3c7', 'center', '700');
+  txt(ctx, date, SZ / 2, 325, 30, '#92400e', 'center');
 
-  drawText(ctx, '👑', W / 2, 280, 120, '#f59e0b', 'center');
-  drawText(ctx, 'بیشترین اقدام امروز', W / 2, 440, 62, '#fef3c7', 'center', true);
-  drawText(ctx, date, W / 2, 520, 38, '#94a3b8', 'center');
-
-  ctx.strokeStyle = '#f59e0b';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(200, 570);
-  ctx.lineTo(W - 200, 570);
-  ctx.stroke();
-
-  drawText(ctx, '🚀', W / 2, 680, 80, '#f59e0b', 'center');
-  drawText(ctx, name, W / 2, 800, 80, '#ffffff', 'center', true);
-
-  // score card
-  ctx.fillStyle = 'rgba(124,58,237,0.3)';
-  ctx.beginPath();
-  ctx.roundRect(200, 880, W - 400, 200, 24);
-  ctx.fill();
-  drawText(ctx, 'امتیاز امروز', W / 2, 930, 40, '#c4b5fd', 'center');
-  drawText(ctx, formatNumber(rp.todayScore), W / 2, 1000, 80, '#a855f7', 'center', true);
-
-  if (rp.todayPV > 0) {
-    ctx.fillStyle = 'rgba(16,185,129,0.2)';
-    ctx.beginPath();
-    ctx.roundRect(200, 1110, W - 400, 150, 24);
-    ctx.fill();
-    drawText(ctx, 'PV امروز', W / 2, 1150, 38, '#6ee7b7', 'center');
-    drawText(ctx, formatNumber(rp.todayPV), W / 2, 1210, 65, '#10b981', 'center', true);
-  }
-
-  drawText(ctx, `💪 آفرین ${rp.person.firstName}!`, W / 2, 1440, 52, '#fef3c7', 'center', true);
-  drawText(ctx, 'الگوی تیم باش!', W / 2, 1520, 44, '#94a3b8', 'center');
-
-  downloadCanvas(canvas, `best-today.png`);
-}
-
-// ── Person card (1080×1080 square) ────────────────────────────────────────
-
-export function exportPersonCard(rp: RankedPerson): void {
-  const CW = 1080, CH = 1080;
-  const canvas = document.createElement('canvas');
-  canvas.width = CW;
-  canvas.height = CH;
-  const ctx = canvas.getContext('2d')!;
-  ctx.direction = 'rtl';
-
-  // Background
-  const grad = ctx.createLinearGradient(0, 0, CW, CH);
-  grad.addColorStop(0, '#0f0c29');
-  grad.addColorStop(1, '#1a1040');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, CW, CH);
-
-  // Decorative glow
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = '#7c3aed';
-  ctx.beginPath();
-  ctx.arc(CW * 0.85, CH * 0.15, 300, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  const name = `${rp.person.firstName} ${rp.person.lastName}`;
-  const date = getTodayJalali();
-
-  // Rank badge
-  const badge = RANK_BADGES[rp.rank];
-  if (badge) {
-    drawText(ctx, badge, CW / 2, 130, 90, '#f59e0b', 'center');
-  } else {
-    drawText(ctx, `رتبه ${rp.rank}`, CW / 2, 130, 55, '#a78bfa', 'center', true);
-  }
+  divider(ctx, 360, '#f59e0b', 0.6);
 
   // Avatar circle
-  ctx.fillStyle = rp.rank === 1 ? '#d97706' : '#6d28d9';
-  ctx.beginPath();
-  ctx.arc(CW / 2, 290, 100, 0, Math.PI * 2);
-  ctx.fill();
-  drawText(ctx, rp.person.firstName[0], CW / 2, 293, 90, '#fff', 'center', true);
+  ctx.fillStyle = '#92400e';
+  ctx.beginPath(); ctx.arc(SZ / 2, 460, 90, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(SZ / 2, 460, 90, 0, Math.PI * 2); ctx.stroke();
+  txt(ctx, rp.person.firstName[0], SZ / 2, 465, 80, '#fff', 'center', '700');
 
-  // Name
-  drawText(ctx, name, CW / 2, 440, 64, '#f8fafc', 'center', true);
-  if (rp.person.team) {
-    drawText(ctx, rp.person.team, CW / 2, 510, 36, '#94a3b8', 'center');
+  txt(ctx, name, SZ / 2, 590, 58, '#ffffff', 'center', '700');
+  if (rp.person.team) txt(ctx, rp.person.team, SZ / 2, 645, 30, '#a16207', 'center');
+
+  // Score card
+  roundRect(ctx, 140, 685, SZ - 280, 140, 24, 'rgba(245,158,11,0.2)', '#f59e0b');
+  txt(ctx, 'امتیاز امروز', SZ / 2, 730, 30, '#fde68a', 'center');
+  txt(ctx, formatNumber(rp.todayScore), SZ / 2, 790, 72, '#f59e0b', 'center', '700');
+
+  // PV badge if any
+  if (rp.todayPV > 0) {
+    roundRect(ctx, 280, 845, SZ - 560, 60, 30, 'rgba(16,185,129,0.2)', '#10b981');
+    txt(ctx, `PV: ${formatNumber(rp.todayPV)}`, SZ / 2, 875, 28, '#6ee7b7', 'center', '700');
   }
-  drawText(ctx, date, CW / 2, 560, 30, '#64748b', 'center');
 
-  // Divider
-  ctx.strokeStyle = '#7c3aed';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(120, 595);
-  ctx.lineTo(CW - 120, 595);
-  ctx.stroke();
+  txt(ctx, `💪 آفرین ${rp.person.firstName}! الگوی تیم باش`, SZ / 2, 970, 30, '#fef3c7', 'center', '700');
 
-  // Stats grid (2×2)
-  const statsData = [
-    { label: 'امتیاز کل', val: formatNumber(rp.totalScore), color: '#a78bfa' },
-    { label: 'امتیاز هفته', val: formatNumber(rp.weekScore), color: '#34d399' },
-    { label: 'امتیاز امروز', val: formatNumber(rp.todayScore), color: '#fbbf24' },
-    { label: 'PV کل', val: formatNumber(rp.totalPV), color: '#60a5fa' },
+  watermark(ctx);
+  download(canvas, 'best-today.png');
+}
+
+// ── Person card — 1080×1080 ───────────────────────────────────────────────────
+
+export function exportPersonCard(rp: RankedPerson): void {
+  const [canvas, ctx] = makeCanvas();
+  drawBg(ctx, rp.rank === 1 ? 'gold' : 'dark');
+
+  const name = `${rp.person.firstName} ${rp.person.lastName}`;
+  const date = getTodayJalali();
+  const badge = RANK_BADGES[rp.rank];
+  const accentColor = rp.rank === 1 ? '#f59e0b' : rp.rank <= 3 ? '#a78bfa' : '#64748b';
+
+  // Top bar
+  roundRect(ctx, 0, 0, SZ, 110, 0, 'rgba(255,255,255,0.04)');
+  txt(ctx, badge ? `${badge} رتبه ${rp.rank}` : `رتبه ${rp.rank}`, SZ / 2, 55, 44, accentColor, 'center', '700');
+  txt(ctx, date, SZ - 60, 55, 24, '#475569', 'right');
+
+  divider(ctx, 110, accentColor);
+
+  // Avatar
+  ctx.fillStyle = rp.rank === 1 ? '#92400e' : '#4c1d95';
+  ctx.beginPath(); ctx.arc(SZ / 2, 250, 100, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(SZ / 2, 250, 100, 0, Math.PI * 2); ctx.stroke();
+  txt(ctx, rp.person.firstName[0], SZ / 2, 255, 85, '#fff', 'center', '700');
+
+  txt(ctx, name, SZ / 2, 390, 56, '#f8fafc', 'center', '700');
+  if (rp.person.team) txt(ctx, rp.person.team, SZ / 2, 445, 30, '#94a3b8', 'center');
+
+  divider(ctx, 480, accentColor, 0.4);
+
+  // Stats 2×2 grid
+  const stats = [
+    { label: 'امتیاز کل',   val: formatNumber(rp.totalScore), color: '#a78bfa' },
+    { label: 'امتیاز هفته', val: formatNumber(rp.weekScore),  color: '#34d399' },
+    { label: 'امتیاز امروز',val: formatNumber(rp.todayScore), color: '#fbbf24' },
+    { label: 'PV کل',        val: formatNumber(rp.totalPV),   color: '#60a5fa' },
   ];
 
-  const cellW = (CW - 120) / 2;
+  const cellW = (SZ - 100) / 2;
   const cellH = 160;
-  const startX = 60;
-  const startY = 630;
+  const gx = 50, gy = 500;
 
-  statsData.forEach((s, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = startX + col * cellW;
-    const y = startY + row * cellH;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    ctx.beginPath();
-    ctx.roundRect(x + 8, y + 8, cellW - 16, cellH - 16, 20);
-    ctx.fill();
-
-    drawText(ctx, s.val, x + cellW / 2, y + cellH / 2 - 15, 52, s.color, 'center', true);
-    drawText(ctx, s.label, x + cellW / 2, y + cellH / 2 + 38, 28, '#94a3b8', 'center');
+  stats.forEach((s, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gx + col * cellW, y = gy + row * cellH;
+    roundRect(ctx, x + 8, y + 8, cellW - 16, cellH - 16, 20, 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0.07)');
+    txt(ctx, s.val, x + cellW / 2, y + cellH / 2 - 16, 46, s.color, 'center', '700');
+    txt(ctx, s.label, x + cellW / 2, y + cellH / 2 + 32, 24, '#94a3b8', 'center');
   });
 
-  // Footer
-  drawText(ctx, '🔥 میرزایی کوچ', CW / 2, CH - 40, 30, '#4c1d95', 'center');
-
-  downloadCanvas(canvas, `card-${rp.person.firstName}.png`);
+  watermark(ctx);
+  download(canvas, `card-${rp.person.firstName}.png`);
 }
 
-// ── Rankings image (all visible ranked people) ────────────────────────────
+// ── Rankings image — 1080×1080 ────────────────────────────────────────────────
 
-export function exportRankingsImage(ranked: ReturnType<typeof Array.prototype.slice>, title: string): void {
-  const rows = (ranked as RankedPerson[]).slice(0, 20);
-  const rowH = 90;
-  const headerH = 220;
-  const footerH = 80;
-  const H_canvas = headerH + rows.length * rowH + footerH;
+export function exportRankingsImage(
+  ranked: RankedPerson[],
+  title: string
+): void {
+  const [canvas, ctx] = makeCanvas();
+  drawBg(ctx, 'dark');
 
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = Math.max(H_canvas, 600);
-  const ctx = canvas.getContext('2d')!;
-  ctx.direction = 'rtl';
-
-  // Background
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grad.addColorStop(0, '#0f0c29');
-  grad.addColorStop(1, '#120024');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, canvas.height);
+  const rows = ranked.slice(0, 10);
 
   // Header
-  drawText(ctx, '🏆', W / 2, 80, 70, '#f59e0b', 'center');
-  drawText(ctx, title, W / 2, 155, 56, '#f8fafc', 'center', true);
-  drawText(ctx, getTodayJalali(), W / 2, 200, 32, '#94a3b8', 'center');
+  roundRect(ctx, 0, 0, SZ, 120, 0, 'rgba(124,58,237,0.18)');
+  txt(ctx, '🏆', 80, 60, 48, '#f59e0b', 'left');
+  txt(ctx, title, SZ / 2 + 20, 50, 46, '#f8fafc', 'center', '700');
+  txt(ctx, getTodayJalali(), SZ / 2 + 20, 93, 26, '#94a3b8', 'center');
 
-  // Rows
+  divider(ctx, 120);
+
+  const rowH = 90;
+  const startY = 132;
+
   rows.forEach((rp, i) => {
     const rank = i + 1;
-    const y = headerH + i * rowH;
+    const y = startY + i * rowH;
     const badge = RANK_BADGES[rank];
 
-    // Row bg
-    ctx.fillStyle = rank === 1
-      ? 'rgba(245,158,11,0.15)'
-      : rank <= 3 ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.03)';
-    ctx.beginPath();
-    ctx.roundRect(60, y + 6, W - 120, rowH - 10, 12);
-    ctx.fill();
+    const rowBg =
+      rank === 1 ? 'rgba(245,158,11,0.15)' :
+      rank <= 3  ? 'rgba(124,58,237,0.12)' :
+      i % 2 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)';
+    roundRect(ctx, 50, y + 4, SZ - 100, rowH - 8, 14, rowBg);
 
-    // Rank
     const rankColor = rank === 1 ? '#f59e0b' : rank === 2 ? '#94a3b8' : rank === 3 ? '#cd7f32' : '#64748b';
-    drawText(ctx, badge ?? String(rank), 130, y + rowH / 2, 36, rankColor, 'center', true);
+    txt(ctx, badge ?? String(rank), 108, y + rowH / 2, rank <= 3 ? 32 : 24, rankColor, 'center', '700');
 
-    // Name
+    const name = `${rp.person.firstName} ${rp.person.lastName}`;
     const nameColor = rank <= 3 ? '#f1f5f9' : '#cbd5e1';
-    const name = `${(rp as RankedPerson).person.firstName} ${(rp as RankedPerson).person.lastName}`;
-    drawText(ctx, name, W - 220, y + rowH / 2, 34, nameColor, 'right', rank <= 3);
-
-    // Score
-    drawText(ctx, formatNumber((rp as RankedPerson).totalScore), 250, y + rowH / 2, 34, '#a78bfa', 'left', true);
+    txt(ctx, name, SZ - 160, y + rowH / 2 - 12, 28, nameColor, 'right', rank <= 3 ? '700' : '400');
+    txt(ctx, `${formatNumber(rp.totalScore)} امتیاز`, SZ - 160, y + rowH / 2 + 14, 22, '#a78bfa', 'right');
   });
 
-  // Footer
-  drawText(ctx, '🔥 میرزایی کوچ', W / 2, canvas.height - 30, 28, '#4c1d95', 'center');
-
-  downloadCanvas(canvas, 'rankings.png');
+  watermark(ctx);
+  download(canvas, 'rankings.png');
 }
 
-// ── Share via Web Share API or fall back to download ──────────────────────
+// ── Web Share API / download fallback ────────────────────────────────────────
 
 export async function shareCanvasImage(
   canvas: HTMLCanvasElement,
@@ -372,11 +350,8 @@ export async function shareCanvasImage(
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
       resolve();

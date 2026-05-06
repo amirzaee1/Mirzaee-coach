@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { Person, OrgEvent, TopTenPeriod } from '../types';
+import { Person, OrgEvent, TopTenPeriod, AppSettings } from '../types';
 import { AppNav } from '../App';
 import { getTopTen } from '../utils/scoring';
-import { RANK_BADGES, WEEKLY_PRIZES, MONTHLY_PRIZES } from '../constants';
+import { RANK_BADGES } from '../constants';
 import { formatNumber, formatToman, getTodayJalali } from '../utils/date';
 import { exportTopTenImage } from '../utils/imageExport';
 import { buildTopTenText } from '../utils/textExport';
@@ -11,6 +11,7 @@ interface Props {
   people: Person[];
   events: OrgEvent[];
   period: TopTenPeriod;
+  settings: AppSettings;
   nav: AppNav;
 }
 
@@ -20,9 +21,12 @@ const PERIOD_LABELS: Record<TopTenPeriod, string> = {
   month: 'ماه جاری',
 };
 
-const TopTen: React.FC<Props> = ({ people, events, period, nav }) => {
+const TopTen: React.FC<Props> = ({ people, events, period, settings, nav }) => {
   const ranked = useMemo(() => getTopTen(people, events, period), [people, events, period]);
-  const prizes = period === 'week' ? WEEKLY_PRIZES : period === 'month' ? MONTHLY_PRIZES : {} as Record<number,number>;
+  const prizes =
+    period === 'week'  ? settings.prizes.weekly :
+    period === 'month' ? settings.prizes.monthly :
+    {} as Record<number, number>;
   const date = getTodayJalali();
 
   const text = useMemo(() => buildTopTenText(ranked, period), [ranked, period]);
@@ -160,7 +164,7 @@ const TopTen: React.FC<Props> = ({ people, events, period, nav }) => {
             📋 کپی متن
           </button>
           <button
-            onClick={() => exportTopTenImage(ranked, period)}
+            onClick={() => exportTopTenImage(ranked, period, settings)}
             className="bg-violet-600 hover:bg-violet-500 rounded-2xl py-3 text-sm font-bold text-white transition-colors"
           >
             🖼️ دانلود تصویر

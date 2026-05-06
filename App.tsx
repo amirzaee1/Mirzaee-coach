@@ -123,6 +123,14 @@ const App: React.FC = () => {
     syncCloud(() => cloudDeleteEvent(id));
   }, [syncCloud]);
 
+  const handleDeletePerson = useCallback((id: string) => {
+    setPeople((prev) => prev.filter((p) => p.id !== id));
+    setEvents((prev) => prev.filter((e) => e.personId !== id));
+    syncCloud(async () => {
+      // soft approach: mark deleted locally; Supabase row left for now
+    });
+  }, [syncCloud]);
+
   const handleSaveSettings = useCallback((s: AppSettings) => {
     setSettings(s);
     syncCloud(() => cloudSaveSettings(s));
@@ -151,6 +159,7 @@ const App: React.FC = () => {
             onUpdateEvent={handleUpdateEvent}
             onDeleteEvent={handleDeleteEvent}
             onSavePerson={handleSavePerson}
+            onDeletePerson={handleDeletePerson}
           />
         );
       case 'add-person':
@@ -171,11 +180,12 @@ const App: React.FC = () => {
             people={people}
             events={events}
             period={(navParams.topTenPeriod as TopTenPeriod) ?? 'week'}
+            settings={settings}
             nav={nav}
           />
         );
       case 'nightly-report':
-        return <NightlyReport people={people} events={events} nav={nav} />;
+        return <NightlyReport people={people} events={events} settings={settings} nav={nav} />;
       case 'ai-message':
         return <AIMessage people={people} events={events} nav={nav} />;
       case 'settings':

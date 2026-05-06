@@ -10,6 +10,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     agha_mohammad_meeting: 3,
   },
   pvPerMillion: 1,
+  prizes: {
+    weekly:  { 1: 1_000_000, 2: 700_000, 3: 500_000 },
+    monthly: { 1: 2_000_000 },
+  },
 };
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {

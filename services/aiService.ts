@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { RankedPerson } from '../types';
 import { GEMINI_MODEL } from '../constants';
-import { formatNumber } from '../utils/date';
+import { formatNumber, getTodayJalali } from '../utils/date';
 
 let ai: GoogleGenAI | null = null;
 
@@ -53,6 +53,41 @@ export async function generateMotivationalMessage(
 - مناسب ارسال در پیام‌رسان
 - از ایموجی مناسب استفاده کن
 - هیچ توضیح یا مقدمه‌ای ندی — مستقیم متن پیام رو بنویس`;
+
+  const response = await client.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: prompt,
+  });
+
+  return response.text?.trim() ?? 'پیام تولید نشد';
+}
+
+export async function generatePersonalMessage(rp: RankedPerson): Promise<string> {
+  const client = getAI();
+
+  const name = `${rp.person.firstName} ${rp.person.lastName}`;
+  const date = getTodayJalali();
+
+  const prompt = `تو مدیر یک سازمان شبکه‌ای ایرانی هستی. می‌خوای یک پیام انگیزشی شخصی‌سازی‌شده برای یکی از اعضای تیمت بنویسی تا در تلگرام یا واتساپ برایش بفرستی.
+
+اطلاعات این عضو:
+- نام: ${name}
+- تاریخ: ${date}
+- رتبه کلی: ${rp.rank}
+- امتیاز کل: ${formatNumber(rp.totalScore)}
+- امتیاز امروز: ${formatNumber(rp.todayScore)}
+- امتیاز هفته: ${formatNumber(rp.weekScore)}
+- امتیاز ماه: ${formatNumber(rp.monthScore)}
+${rp.totalPV > 0 ? `- مجموع PV: ${formatNumber(rp.totalPV)}` : ''}
+
+قوانین نوشتن:
+- مستقیم اسم ${rp.person.firstName} را صدا بزن
+- لحن صمیمی، گرم، انگیزه‌بخش
+- به عملکردش اشاره کن (امتیاز، رتبه)
+- ۳ تا ۴ خط کوتاه
+- از ایموجی زیبا و مناسب استفاده کن
+- مناسب ارسال در پیام‌رسان
+- هیچ توضیح یا مقدمه‌ای ندی — فقط متن پیام را بنویس`;
 
   const response = await client.models.generateContent({
     model: GEMINI_MODEL,
